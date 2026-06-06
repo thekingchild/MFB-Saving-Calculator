@@ -8,7 +8,7 @@ const plans = [
     name: "Spend & Save",
     type: "tiered-compound",
     headline: "15% up to ₦80k, then 5%",
-    source: "User screenshot",
+    source: "Plan rate details provided for this calculator",
     verified: true,
     taxApplies: true,
     tiers: [
@@ -60,7 +60,7 @@ const plans = [
     name: "CashBox",
     type: "tiered-compound",
     headline: "20%, 16%, then 8%",
-    source: "User screenshot",
+    source: "Plan rate details provided for this calculator",
     verified: true,
     taxApplies: true,
     tiers: [
@@ -68,7 +68,7 @@ const plans = [
       { upTo: 100000, rate: 0.16, label: "₦10,001-₦100,000 at 16% p.a." },
       { upTo: Infinity, rate: 0.08, label: "Remaining balance at 8% p.a." },
     ],
-    note: "Screenshot says interest credited is post-tax and below ₦0.01 is not credited.",
+    note: "Interest credited is post-tax, and amounts below ₦0.01 are not credited.",
   },
   {
     id: "palmpay-safebox",
@@ -77,14 +77,14 @@ const plans = [
     name: "SafeBox",
     type: "tiered-compound",
     headline: "16% up to ₦300k, then 6%",
-    source: "User screenshot",
+    source: "Plan rate details provided for this calculator",
     verified: true,
     taxApplies: true,
     tiers: [
       { upTo: 300000, rate: 0.16, label: "First ₦300,000 at 16% p.a." },
       { upTo: Infinity, rate: 0.06, label: "Remaining balance at 6% p.a." },
     ],
-    note: "Screenshot says credited interest is post-tax.",
+    note: "Credited interest is post-tax.",
   },
   {
     id: "palmpay-fixed",
@@ -93,7 +93,7 @@ const plans = [
     name: "Fixed Savings",
     type: "fixed",
     headline: "10%-20% by duration",
-    source: "User screenshot",
+    source: "Plan rate details provided for this calculator",
     verified: true,
     taxApplies: true,
     fixedRates: [
@@ -116,7 +116,7 @@ const plans = [
     source: "Awaiting official input",
     verified: false,
     taxApplies: true,
-    note: "PalmPay Spend & Save exists in the product list, but no rate screenshot was supplied.",
+    note: "PalmPay Spend & Save exists in the product list, but its rate details have not been added yet.",
   },
   {
     id: "piggyvest-piggybank",
