@@ -9,6 +9,7 @@ This project is a browser-based calculator for comparing Nigerian fintech and MF
 - `index.html` contains the page layout, calculator controls, result areas, rate settings form, educational notes, and source notes.
 - `styles.css` contains the visual system, responsive layout, plan cards, breakdown panel, and rate settings editor styles.
 - `app.js` contains all plan data, calculation logic, filtering, sorting, rendering, and local customization behavior.
+- `assets/og-image.jpg` is the social preview image referenced by Open Graph and Twitter metadata.
 
 There is no build step or framework. The app can be served with:
 
@@ -28,9 +29,11 @@ http://localhost:5173
 2. User controls update the `state` object.
 3. `calculate()` routes each plan to the correct calculation method.
 4. `getFilteredPlans()` applies bank filters and sorting.
-5. `renderCards()` shows plan summaries.
-6. `renderBreakdown()` shows details for the selected plan.
-7. The Rate Settings form updates the selected plan and saves the edited plan list in `localStorage`.
+5. `renderChart()` shows the top matching plans as a maturity-balance comparison chart.
+6. `renderCards()` shows plan summaries, verification labels, and helpful plan badges.
+7. `renderBreakdown()` shows details for the selected plan.
+8. The Rate Settings form updates the selected plan and saves the edited plan list in `localStorage`.
+9. Comparison controls are mirrored into the URL so amount, term, view, filter, selected plan, and sort can be shared.
 
 ## Supported Plan Types
 
@@ -51,8 +54,21 @@ The in-page Rate Settings panel lets users:
 - Mark rate data as available.
 - Add a future MFB plan with editable starter tiers.
 - Reset a built-in plan or remove a custom plan.
+- Export all current rate settings as JSON.
+- Import a previously exported rate settings JSON file.
 
 Custom changes are saved in the browser only. They do not rewrite `app.js`.
+
+## Trust Metadata
+
+Each plan is enriched with source and verification metadata:
+
+- `sourceLabel`: public-facing source name shown in the UI.
+- `sourceUrl`: optional provider or source URL.
+- `lastVerified`: date string shown on cards and the breakdown panel.
+- `confidence`: short trust label, such as "Verified rate note" or "User-confirmed rate".
+
+Rates can change without notice, so public pages should keep the rate update date and source notes visible.
 
 ## Adding Future MFBs in Code
 
@@ -65,6 +81,10 @@ To add a new provider permanently, add a plan object to `plans` in `app.js` with
 - `type`: calculation type
 - `headline`: short rate summary
 - `source`: public-facing source label
+- `sourceLabel`: short source label for UI display
+- `sourceUrl`: optional source or provider link
+- `lastVerified`: rate verification date
+- `confidence`: trust label for the plan card
 - `verified`: whether rates are available
 - `taxApplies`: whether 10% withholding tax should apply
 - `tiers`, `rate`, or `fixedRates`: depending on plan type

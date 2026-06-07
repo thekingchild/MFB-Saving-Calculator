@@ -1,5 +1,12 @@
 const TAX_RATE = 0.1;
 const STORAGE_KEY = "mfb-saving-calculator-plan-settings";
+const RATE_DATA_UPDATED = "June 6, 2026";
+const DEFAULT_SOURCE_URL = "";
+const PROVIDER_SOURCE_URLS = {
+  OPay: "https://www.opayweb.com/",
+  PalmPay: "https://www.palmpay.com/",
+  PiggyVest: "https://www.piggyvest.com/",
+};
 
 let plans = [
   {
@@ -197,6 +204,7 @@ let plans = [
   },
 ];
 
+plans = plans.map(applyTrustMetadata);
 const defaultPlans = plans.map(clonePlan);
 
 const amountInput = document.querySelector("#amountInput");
@@ -204,8 +212,12 @@ const termSelect = document.querySelector("#termSelect");
 const viewSelect = document.querySelector("#viewSelect");
 const sortSelect = document.querySelector("#sortSelect");
 const planCards = document.querySelector("#planCards");
+const comparisonChart = document.querySelector("#comparisonChart");
+const chartCaption = document.querySelector("#chartCaption");
+const chartMetric = document.querySelector("#chartMetric");
 const breakdown = document.querySelector("#breakdown");
 const planCount = document.querySelector("#planCount");
+const lastUpdated = document.querySelector("#lastUpdated");
 const form = document.querySelector("#savingsForm");
 const resetButton = document.querySelector("#resetButton");
 const tabs = [...document.querySelectorAll(".tab")];
@@ -222,6 +234,9 @@ const tierEditor = document.querySelector("#tierEditor");
 const addTierButton = document.querySelector("#addTierButton");
 const newPlanButton = document.querySelector("#newPlanButton");
 const resetPlanButton = document.querySelector("#resetPlanButton");
+const exportRatesButton = document.querySelector("#exportRatesButton");
+const importRatesButton = document.querySelector("#importRatesButton");
+const importRatesInput = document.querySelector("#importRatesInput");
 const settingsStatus = document.querySelector("#settingsStatus");
 
 let state = {
@@ -233,6 +248,8 @@ let state = {
   settingsPlanId: "palmpay-cashbox",
   sort: "maturity",
 };
+
+applyUrlState();
 
 const currency = new Intl.NumberFormat("en-NG", {
   style: "currency",
@@ -251,6 +268,7 @@ function clonePlan(plan) {
     ...plan,
     tiers: plan.tiers?.map((tier) => ({ ...tier })),
     fixedRates: plan.fixedRates?.map((rate) => ({ ...rate })),
+    balanceRules: plan.balanceRules?.map((rule) => ({ ...rule })),
   };
 }
 
@@ -283,8 +301,62 @@ function slugify(value) {
     .replace(/^-|-$/g, "");
 }
 
+function applyUrlState() {
+  const params = new URLSearchParams(window.location.search);
+  const amount = parseAmount(params.get("amount"));
+  const term = Number(params.get("term"));
+  const view = params.get("view");
+  const bank = params.get("bank");
+  const selected = params.get("plan");
+  const sort = params.get("sort");
+
+  if (amount >= 1000) state.amount = amount;
+  if ([30, 90, 180, 365, 730].includes(term)) state.term = term;
+  if (["net", "gross"].includes(view)) state.view = view;
+  if (["all", "opay", "palmpay", "piggyvest"].includes(bank)) state.bank = bank;
+  if (selected) state.selectedPlanId = selected;
+  if (["maturity", "interest", "rate", "bank"].includes(sort)) state.sort = sort;
+}
+
+function updateUrlState() {
+  const params = new URLSearchParams();
+  params.set("amount", String(state.amount));
+  params.set("term", String(state.term));
+  params.set("view", state.view);
+  params.set("bank", state.bank);
+  params.set("plan", state.selectedPlanId);
+  params.set("sort", state.sort);
+  window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}${window.location.hash}`);
+}
+
+function sanitizeExternalUrl(value) {
+  if (!value) return "";
+
+  try {
+    const url = new URL(value, window.location.origin);
+    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function applyTrustMetadata(plan) {
+  const providerUrl = PROVIDER_SOURCE_URLS[plan.bank] || DEFAULT_SOURCE_URL;
+  const sourceUrl = sanitizeExternalUrl(plan.sourceUrl || providerUrl);
+  const sourceLabel = plan.sourceLabel || plan.source || "Custom rate settings";
+  const confidence = plan.confidence || (plan.verified ? "Verified rate note" : "Needs verification");
+
+  return {
+    ...plan,
+    sourceUrl,
+    sourceLabel,
+    lastVerified: plan.lastVerified || RATE_DATA_UPDATED,
+    confidence,
+  };
+}
+
 function normalizeStoredPlan(plan) {
-  const normalized = clonePlan(plan);
+  const normalized = applyTrustMetadata(clonePlan(plan));
   if (normalized.tiers) {
     normalized.tiers = normalized.tiers.map((tier) => ({
       ...tier,
@@ -493,9 +565,67 @@ function getFilteredPlans() {
     });
 }
 
+function getPlanBadges(plan, result, leaders) {
+  const badges = [];
+  if (result.available && plan.id === leaders.maturity) badges.push("Highest maturity");
+  if (result.available && plan.id === leaders.daily) badges.push("Best daily return");
+  if (plan.type === "fixed") badges.push("Lock-in");
+  if (plan.taxApplies) badges.push("10% WHT");
+  if (!plan.verified) badges.push("Needs verification");
+  return badges.slice(0, 3);
+}
+
+function getLeaderIds(items) {
+  const available = items.filter((item) => item.result.available);
+  const highestBy = (field) => available.reduce((best, item) => (!best || item.result[field] > best.result[field] ? item : best), null)?.plan.id;
+
+  return {
+    maturity: highestBy("maturity"),
+    daily: highestBy("dailyNet"),
+  };
+}
+
+function renderChart(items) {
+  const available = items.filter((item) => item.result.available).slice(0, 6);
+  const maxValue = Math.max(...available.map((item) => item.result.maturity), 0);
+  chartMetric.textContent = state.view === "gross" ? "Gross view" : "Net view";
+  chartCaption.textContent = `Top ${available.length || 0} plans by maturity balance for ${wholeCurrency.format(state.amount)} over ${state.term} days.`;
+
+  if (!available.length || maxValue <= 0) {
+    comparisonChart.innerHTML = `<div class="empty compact-empty">Enter at least ${wholeCurrency.format(1000)} to compare plans.</div>`;
+    return;
+  }
+
+  comparisonChart.innerHTML = available
+    .map(({ plan, result }) => {
+      const width = Math.max(5, (result.maturity / maxValue) * 100);
+      const interest = state.view === "gross" ? result.grossInterest : result.netInterest;
+
+      return `
+        <div class="chart-row">
+          <div class="chart-label">
+            <strong>${escapeHTML(plan.bank)}</strong>
+            <span>${escapeHTML(plan.name)}</span>
+          </div>
+          <div class="chart-track" aria-label="${escapeHTML(plan.bank)} ${escapeHTML(plan.name)} maturity ${currency.format(result.maturity)}">
+            <span style="width: ${width}%"></span>
+          </div>
+          <div class="chart-value">
+            <strong>${currency.format(result.maturity)}</strong>
+            <span>${currency.format(interest)} ${state.view === "gross" ? "gross" : "net"}</span>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
 function renderCards() {
   const items = getFilteredPlans();
+  const leaders = getLeaderIds(items);
   planCount.textContent = `Showing ${items.length} ${items.length === 1 ? "plan" : "plans"}`;
+  lastUpdated.textContent = `Rate data updated: ${RATE_DATA_UPDATED}`;
+  renderChart(items);
 
   if (!items.length) {
     planCards.innerHTML = `<div class="empty">No plans match this filter.</div>`;
@@ -516,6 +646,9 @@ function renderCards() {
       const rate = result.available ? `${(result.effectiveRate * 100).toFixed(2)}% p.a.` : plan.headline;
       const dayValue = result.available ? currency.format(result.dailyNet) : "Pending";
       const weekValue = result.available ? currency.format(result.weeklyNet) : "Pending";
+      const badges = getPlanBadges(plan, result, leaders)
+        .map((badge) => `<span>${escapeHTML(badge)}</span>`)
+        .join("");
 
       return `
         <article class="${cardClass}" tabindex="0" role="button" data-plan-id="${plan.id}" aria-pressed="${isActive}">
@@ -526,6 +659,11 @@ function renderCards() {
             </div>
             <span class="status ${statusClass}">${status}</span>
           </div>
+          <div class="trust-line">
+            <span>${escapeHTML(plan.confidence)}</span>
+            <span>Verified ${escapeHTML(plan.lastVerified)}</span>
+          </div>
+          <div class="badges">${badges}</div>
           <div class="figures">
             <div class="metric">
               <span>${state.view === "gross" ? "Gross interest" : "Net interest"}</span>
@@ -550,6 +688,9 @@ function renderCards() {
 function renderBreakdown() {
   const plan = plans.find((item) => item.id === state.selectedPlanId) || plans[0];
   const result = calculate(plan, state.amount, state.term);
+  const sourceMarkup = plan.sourceUrl
+    ? `<a href="${escapeHTML(plan.sourceUrl)}" target="_blank" rel="noopener">${escapeHTML(plan.sourceLabel || plan.source)}</a>`
+    : escapeHTML(plan.sourceLabel || plan.source);
 
   if (!result.available) {
     breakdown.innerHTML = `
@@ -561,7 +702,8 @@ function renderBreakdown() {
       <div class="break-list">
         <div class="break-row"><span>Principal</span><strong>${wholeCurrency.format(state.amount)}</strong></div>
         <div class="break-row"><span>Term</span><strong>${state.term} days</strong></div>
-        <div class="break-row"><span>Source status</span><strong>${escapeHTML(plan.source)}</strong></div>
+        <div class="break-row"><span>Source status</span><strong>${sourceMarkup}</strong></div>
+        <div class="break-row"><span>Last verified</span><strong>${escapeHTML(plan.lastVerified)}</strong></div>
       </div>
       <p class="rate-line">${escapeHTML(plan.note)}</p>
     `;
@@ -594,9 +736,10 @@ function renderBreakdown() {
       <div class="break-row"><span>Weekly net estimate</span><strong>${currency.format(result.weeklyNet)}</strong></div>
       <div class="break-row"><span>Monthly net estimate</span><strong>${currency.format(result.monthlyNet)}</strong></div>
       <div class="break-row"><span>Annualized net estimate</span><strong>${currency.format(result.yearlyNet)}</strong></div>
+      <div class="break-row"><span>Last verified</span><strong>${escapeHTML(plan.lastVerified)}</strong></div>
     </div>
     <ul class="tier-list">${tierMarkup}</ul>
-    <p class="rate-line">${escapeHTML(plan.note)} Source: ${escapeHTML(plan.source)}.</p>
+    <p class="rate-line">${escapeHTML(plan.note)} Source: ${sourceMarkup}.</p>
   `;
 }
 
@@ -730,6 +873,10 @@ function saveSelectedPlanSettings() {
   plan.verified = settingsVerifiedInput.checked;
   plan.taxApplies = settingsTaxInput.checked;
   plan.source = settingsSourceInput.value.trim() || "Custom rate settings";
+  plan.sourceLabel = plan.source;
+  plan.sourceUrl = PROVIDER_SOURCE_URLS[bank] || "";
+  plan.lastVerified = new Date().toLocaleDateString("en-NG", { year: "numeric", month: "long", day: "numeric" });
+  plan.confidence = plan.verified ? "User-confirmed rate" : "Needs verification";
   plan.note = settingsNoteInput.value.trim() || "Rates were customized in the calculator settings.";
 
   if (model === "flat-compound") {
@@ -758,6 +905,10 @@ function addCustomPlan() {
     type: "tiered-compound",
     headline: "20%, 16%, then 8%",
     source: settingsSourceInput.value.trim() || "Custom rate settings",
+    sourceLabel: settingsSourceInput.value.trim() || "Custom rate settings",
+    sourceUrl: "",
+    lastVerified: new Date().toLocaleDateString("en-NG", { year: "numeric", month: "long", day: "numeric" }),
+    confidence: "User-confirmed rate",
     verified: true,
     taxApplies: true,
     tiers: applyTierLabels([
@@ -801,6 +952,48 @@ function resetSelectedPlan() {
   setSettingsStatus(`${removed.bank} ${removed.name} removed from custom plans.`);
 }
 
+function exportRates() {
+  const payload = {
+    app: "Nigerian Savings Rate Calculator",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    plans: plans.map(preparePlanForStorage),
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "mfb-savings-rates.json";
+  link.click();
+  URL.revokeObjectURL(link.href);
+  setSettingsStatus("Rate settings exported as JSON.");
+}
+
+function importRatesFile(file) {
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    try {
+      const payload = JSON.parse(reader.result);
+      if (!Array.isArray(payload.plans)) throw new Error("Import file must include a plans array.");
+
+      plans = payload.plans.map(normalizeStoredPlan);
+      mergeNewBuiltInRates();
+      savePlansToStorage();
+      state.selectedPlanId = plans[0]?.id || state.selectedPlanId;
+      state.settingsPlanId = state.selectedPlanId;
+      render();
+      populateSettings(state.settingsPlanId);
+      setSettingsStatus(`Imported ${plans.length} plans from JSON.`);
+    } catch (error) {
+      setSettingsStatus(`Import failed: ${error.message}`);
+    } finally {
+      importRatesInput.value = "";
+    }
+  });
+  reader.readAsText(file);
+}
+
 function render() {
   amountInput.value = formatInputAmount(state.amount);
   termSelect.value = String(state.term);
@@ -810,6 +1003,7 @@ function render() {
   renderSettingsPlanOptions();
   renderCards();
   renderBreakdown();
+  updateUrlState();
 }
 
 form.addEventListener("submit", (event) => {
@@ -929,6 +1123,18 @@ newPlanButton.addEventListener("click", () => {
 
 resetPlanButton.addEventListener("click", () => {
   resetSelectedPlan();
+});
+
+exportRatesButton.addEventListener("click", () => {
+  exportRates();
+});
+
+importRatesButton.addEventListener("click", () => {
+  importRatesInput.click();
+});
+
+importRatesInput.addEventListener("change", () => {
+  importRatesFile(importRatesInput.files[0]);
 });
 
 loadPlansFromStorage();
