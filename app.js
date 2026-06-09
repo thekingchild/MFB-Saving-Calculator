@@ -1,6 +1,6 @@
 const TAX_RATE = 0.1;
 const STORAGE_KEY = "mfb-saving-calculator-plan-settings";
-const RATE_DATA_UPDATED = "June 6, 2026";
+const RATE_DATA_UPDATED = "June 8, 2026";
 const DEFAULT_SOURCE_URL = "";
 const PROVIDER_SOURCE_URLS = {
   OPay: "https://www.opayweb.com/",
@@ -173,21 +173,21 @@ let plans = [
     bankKey: "piggyvest",
     name: "Safelock",
     type: "fixed",
-    headline: "14%-21% by duration",
-    source: "PiggyVest public FAQ/site",
+    headline: "15%-18.5% by duration",
+    source: "PiggyVest SafeLock in-app rate card",
     verified: true,
     taxApplies: false,
     fixedRates: [
-      { min: 10, max: 30, rate: 0.14, label: "10-30 days at 14% p.a." },
-      { min: 31, max: 60, rate: 0.15, label: "31-60 days at 15% p.a." },
-      { min: 61, max: 90, rate: 0.16, label: "61-90 days at 16% p.a." },
-      { min: 91, max: 180, rate: 0.17, label: "91-180 days at 17% p.a." },
+      { min: 10, max: 30, rate: 0.15, label: "10-30 days at 15% p.a." },
+      { min: 31, max: 60, rate: 0.16, label: "31-60 days at 16% p.a." },
+      { min: 61, max: 90, rate: 0.17, label: "61-90 days at 17% p.a." },
+      { min: 91, max: 180, rate: 0.175, label: "91-180 days at 17.5% p.a." },
       { min: 181, max: 270, rate: 0.18, label: "181-270 days at 18% p.a." },
-      { min: 271, max: 365, rate: 0.2, label: "271-365 days at 20% p.a." },
-      { min: 366, max: 730, rate: 0.205, label: "Above 1-2 years at 20.5% p.a." },
-      { min: 731, max: 3660, rate: 0.21, label: "Above 2 years at 21% p.a." },
+      { min: 271, max: 365, rate: 0.185, label: "271-365 days at 18.5% p.a." },
+      { min: 366, max: 730, rate: 0.185, label: "Above 1-2 years at 18.5% p.a." },
+      { min: 731, max: 3660, rate: 0.185, label: "Above 2 years at 18.5% p.a." },
     ],
-    note: "PiggyVest Safelock rates are duration-dependent and market-sensitive.",
+    note: "PiggyVest Safelock rates are duration-dependent and market-sensitive. Latest in-app rate card shows up to 18.5% p.a.",
   },
   {
     id: "piggyvest-target",
@@ -396,6 +396,12 @@ function mergeNewBuiltInRates() {
     const builtInPlan = defaultPlans.find((item) => item.id === plan.id);
     if (!builtInPlan) return plan;
     if (plan.type === "placeholder" && builtInPlan.type !== "placeholder") return clonePlan(builtInPlan);
+    if (
+      plan.id === "piggyvest-safelock" &&
+      ["PiggyVest public FAQ/site", "PiggyVest SafeLock in-app rate card"].includes(plan.source)
+    ) {
+      return clonePlan(builtInPlan);
+    }
     return plan;
   });
 }
